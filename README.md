@@ -48,6 +48,20 @@ match mv {
 assert_eq!(mv.to_string(), "Nbxd7+");
 ```
 
+`parse_tag_pairs` reads the bracketed header lines at the top of a PGN game
+record - the Seven Tag Roster and any extra tags a source adds - and stops
+at the first line that isn't a tag pair, which is where the move text
+starts:
+
+```rust
+use chess_notation::parse_tag_pairs;
+
+let pgn = "[Event \"F/S Return Match\"]\n[Site \"Belgrade, Serbia JUG\"]\n\n1. e4 e5 ...";
+let tags = parse_tag_pairs(pgn).unwrap();
+assert_eq!(tags[0].name, "Event");
+assert_eq!(tags[0].value, "F/S Return Match");
+```
+
 ## CLI usage
 
 ```
@@ -76,4 +90,6 @@ cargo test
 This is a syntax parser, not a chess engine. It doesn't know about a board,
 so it can't validate that a disambiguation is actually necessary, resolve
 "the only knight that can legally move here", or reject a move that would
-leave the mover's own king in check. See the issues for what's planned.
+leave the mover's own king in check. The PGN side currently only reads the
+tag pair header - move-list parsing (move numbers, comments, NAGs,
+variations) isn't implemented yet. See the issues for what's planned.

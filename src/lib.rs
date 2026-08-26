@@ -10,6 +10,9 @@
 
 use std::fmt;
 
+mod pgn;
+pub use pgn::{parse_tag_pairs, TagPair};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PieceKind {
     Pawn,
