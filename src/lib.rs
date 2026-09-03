@@ -11,7 +11,7 @@
 use std::fmt;
 
 mod pgn;
-pub use pgn::{parse_tag_pairs, TagPair};
+pub use pgn::{parse_movetext, parse_tag_pairs, MoveText, MoveTextEntry, TagPair};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PieceKind {

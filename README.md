@@ -62,6 +62,23 @@ assert_eq!(tags[0].name, "Event");
 assert_eq!(tags[0].value, "F/S Return Match");
 ```
 
+`parse_movetext` reads the move list that follows the tag pairs: move numbers,
+comments (`{...}` and `;...`), NAGs (`$1`), and `(...)` variations. Comments
+and NAGs attach to the move they follow; a comment before the first move is
+kept as a preamble instead:
+
+```rust
+use chess_notation::parse_movetext;
+
+let body = "1. e4 e5 2. Nf3 {developing} Nc6 (2... d6 3. d4) 3. Bb5 a6 1-0";
+let game = parse_movetext(body).unwrap();
+
+assert_eq!(game.moves.len(), 6);
+assert_eq!(game.moves[2].comment.as_deref(), Some("developing"));
+assert_eq!(game.moves[3].variations.len(), 1);
+assert_eq!(game.result.as_deref(), Some("1-0"));
+```
+
 ## CLI usage
 
 ```
@@ -90,6 +107,6 @@ cargo test
 This is a syntax parser, not a chess engine. It doesn't know about a board,
 so it can't validate that a disambiguation is actually necessary, resolve
 "the only knight that can legally move here", or reject a move that would
-leave the mover's own king in check. The PGN side currently only reads the
-tag pair header - move-list parsing (move numbers, comments, NAGs,
-variations) isn't implemented yet. See the issues for what's planned.
+leave the mover's own king in check. There's no FEN parsing yet either, so
+none of that disambiguation-aware validation has anywhere to get board state
+from. See the issues for what's planned.
