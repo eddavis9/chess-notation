@@ -79,6 +79,21 @@ assert_eq!(game.moves[3].variations.len(), 1);
 assert_eq!(game.result.as_deref(), Some("1-0"));
 ```
 
+`parse_fen` reads a Forsyth-Edwards Notation position record - piece
+placement, side to move, castling rights, en passant target square, and the
+two move counters - into a `Position`:
+
+```rust
+use chess_notation::{parse_fen, PieceKind, Square};
+
+let pos = parse_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1").unwrap();
+let e4 = pos.piece_at(Square::from_str("e4").unwrap()).unwrap();
+assert_eq!(e4.kind, PieceKind::Pawn);
+assert_eq!(pos.en_passant, Some(Square::from_str("e3").unwrap()));
+```
+
+`Position` implements `Display` and formats back to the canonical FEN string.
+
 ## CLI usage
 
 ```
@@ -104,9 +119,8 @@ cargo test
 
 ## What's not here yet
 
-This is a syntax parser, not a chess engine. It doesn't know about a board,
-so it can't validate that a disambiguation is actually necessary, resolve
-"the only knight that can legally move here", or reject a move that would
-leave the mover's own king in check. There's no FEN parsing yet either, so
-none of that disambiguation-aware validation has anywhere to get board state
-from. See the issues for what's planned.
+This is a syntax parser, not a chess engine. `parse_fen` gives you a board
+position, but nothing here yet resolves a SAN move against that position -
+it can't validate that a disambiguation is actually necessary, resolve "the
+only knight that can legally move here", or reject a move that would leave
+the mover's own king in check. See the issues for what's planned.

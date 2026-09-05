@@ -1,16 +1,18 @@
 //! Parsing and formatting for Standard Algebraic Notation (SAN), the move
 //! notation used in almost all published chess games and PGN files.
 //!
-//! This crate only understands the *shape* of a move string (piece,
-//! disambiguation, capture, destination, promotion, check marker). It does
-//! not know about a board, so it cannot tell you whether a move is legal or
-//! whether the disambiguation given actually resolves to a single piece.
-//! That's a job for something that tracks position, and deliberately out of
-//! scope here.
+//! SAN parsing (`parse_san`) only understands the *shape* of a move string
+//! (piece, disambiguation, capture, destination, promotion, check marker).
+//! It does not know about a board, so it cannot tell you whether a move is
+//! legal or whether the disambiguation given actually resolves to a single
+//! piece. `parse_fen` parses a board position separately, but nothing here
+//! yet resolves a SAN move against one - that's the next piece to build.
 
 use std::fmt;
 
+mod fen;
 mod pgn;
+pub use fen::{parse_fen, CastlingRights, Color, Piece, Position};
 pub use pgn::{parse_movetext, parse_tag_pairs, MoveText, MoveTextEntry, TagPair};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +34,15 @@ impl PieceKind {
             'Q' => Some(PieceKind::Queen),
             'K' => Some(PieceKind::King),
             _ => None,
+        }
+    }
+
+    // Unlike SAN, FEN spells out the pawn letter ('P'), so this is the
+    // total counterpart to `from_letter`'s SAN-only mapping.
+    fn from_fen_letter(c: char) -> Option<PieceKind> {
+        match c {
+            'P' => Some(PieceKind::Pawn),
+            _ => PieceKind::from_letter(c),
         }
     }
 
