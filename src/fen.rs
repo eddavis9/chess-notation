@@ -2,9 +2,8 @@
 //! to record a chess position: piece placement, side to move, castling
 //! rights, the en passant target square, and the two move counters.
 //!
-//! This gives SAN parsing somewhere to get board state from, but it doesn't
-//! itself resolve a move against that state - that's the next piece to
-//! build on top of this.
+//! This gives SAN parsing somewhere to get board state from; `resolve_move`
+//! is what actually resolves a move against it.
 
 use std::fmt;
 

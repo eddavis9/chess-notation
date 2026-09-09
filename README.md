@@ -94,6 +94,27 @@ assert_eq!(pos.en_passant, Some(Square::from_str("e3").unwrap()));
 
 `Position` implements `Display` and formats back to the canonical FEN string.
 
+`resolve_move` ties parsing and board state together: given a `Position` and
+a parsed `Move`, it finds the piece on the board the move refers to, using
+the position's side to move. It checks piece movement geometry (including
+blocking pieces on sliding moves and pawn double pushes), en passant,
+whether a capture/non-capture move matches what's actually on the
+destination square, and whether a given disambiguation narrows the
+candidates to exactly one piece:
+
+```rust
+use chess_notation::{parse_fen, parse_san, resolve_move};
+
+let pos = parse_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1").unwrap();
+let mv = parse_san("e4").unwrap();
+let resolved = resolve_move(&pos, &mv).unwrap();
+assert_eq!(resolved.from.to_string(), "e2");
+assert_eq!(resolved.to.to_string(), "e4");
+```
+
+It does not check king safety: a move that resolves here may still be
+illegal because it leaves the mover's own king in check.
+
 ## CLI usage
 
 ```
@@ -119,8 +140,8 @@ cargo test
 
 ## What's not here yet
 
-This is a syntax parser, not a chess engine. `parse_fen` gives you a board
-position, but nothing here yet resolves a SAN move against that position -
-it can't validate that a disambiguation is actually necessary, resolve "the
-only knight that can legally move here", or reject a move that would leave
-the mover's own king in check. See the issues for what's planned.
+This is a syntax parser, not a chess engine. `resolve_move` finds which
+piece a SAN move refers to and validates disambiguation, but it doesn't
+check king safety - it won't reject a move that walks into check, leaves
+a pinned piece exposed, or "castles" through check. See the issues for
+what's planned.

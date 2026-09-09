@@ -3,17 +3,21 @@
 //!
 //! SAN parsing (`parse_san`) only understands the *shape* of a move string
 //! (piece, disambiguation, capture, destination, promotion, check marker).
-//! It does not know about a board, so it cannot tell you whether a move is
-//! legal or whether the disambiguation given actually resolves to a single
-//! piece. `parse_fen` parses a board position separately, but nothing here
-//! yet resolves a SAN move against one - that's the next piece to build.
+//! It does not know about a board on its own. `parse_fen` parses a board
+//! position separately, and `resolve_move` ties the two together: given a
+//! parsed move and a position, it finds the piece the move refers to and
+//! checks that any disambiguation given was actually necessary. It does not
+//! check king safety, so a resolved move may still be illegal because it
+//! leaves the mover in check - that's the next piece to build.
 
 use std::fmt;
 
 mod fen;
 mod pgn;
+mod resolve;
 pub use fen::{parse_fen, CastlingRights, Color, Piece, Position};
 pub use pgn::{parse_movetext, parse_tag_pairs, MoveText, MoveTextEntry, TagPair};
+pub use resolve::{resolve_move, ResolveError, ResolvedMove};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PieceKind {
