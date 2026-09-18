@@ -128,3 +128,50 @@ fn castling_through_blocked_path_is_rejected() {
     let fen = "r3k2r/8/8/8/8/8/8/R2NK2R w KQkq - 0 1";
     assert!(resolve(fen, "O-O-O").is_err());
 }
+
+#[test]
+fn king_cannot_move_into_an_attacked_square() {
+    // The rook on a2 rakes the whole second rank, so e2 is off limits even
+    // though nothing stands between the king and it.
+    let fen = "8/8/8/8/8/8/r7/4K2k w - - 0 1";
+    assert!(resolve(fen, "Ke2").is_err());
+}
+
+#[test]
+fn pinned_piece_cannot_move_off_the_pin_line() {
+    // The rook on e2 is the only thing between the king and the rook on
+    // e8; sidestepping to d2 would expose the king down the e-file.
+    let fen = "4r2k/8/8/8/8/8/4R3/4K3 w - - 0 1";
+    assert!(resolve(fen, "Rd2").is_err());
+}
+
+#[test]
+fn pinned_piece_can_still_move_along_the_pin_line() {
+    let fen = "4r2k/8/8/8/8/8/4R3/4K3 w - - 0 1";
+    let (from, to) = resolve(fen, "Re5").unwrap();
+    assert_eq!(from, sq("e2"));
+    assert_eq!(to, sq("e5"));
+}
+
+#[test]
+fn cannot_castle_out_of_check() {
+    let fen = "4r2k/8/8/8/8/8/8/R3K2R w KQ - 0 1";
+    assert!(resolve(fen, "O-O").is_err());
+}
+
+#[test]
+fn cannot_castle_through_an_attacked_square() {
+    // The rook on f8 covers f1, one of the squares the king crosses on its
+    // way to g1.
+    let fen = "5r1k/8/8/8/8/8/8/R3K2R w KQ - 0 1";
+    assert!(resolve(fen, "O-O").is_err());
+}
+
+#[test]
+fn en_passant_capture_that_exposes_king_is_rejected() {
+    // Capturing en passant clears both the c5 and d5 pawns off the fifth
+    // rank in the same move, opening a direct line from the rook on a5 to
+    // the king on e5.
+    let fen = "7k/8/8/r1pPK3/8/8/8/8 w - c6 0 1";
+    assert!(resolve(fen, "dxc6").is_err());
+}

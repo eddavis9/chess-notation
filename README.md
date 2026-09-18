@@ -99,8 +99,10 @@ a parsed `Move`, it finds the piece on the board the move refers to, using
 the position's side to move. It checks piece movement geometry (including
 blocking pieces on sliding moves and pawn double pushes), en passant,
 whether a capture/non-capture move matches what's actually on the
-destination square, and whether a given disambiguation narrows the
-candidates to exactly one piece:
+destination square, whether a given disambiguation narrows the candidates
+to exactly one piece, and whether the move leaves the mover's own king in
+check - including a king that tries to castle out of, through, or into
+check:
 
 ```rust
 use chess_notation::{parse_fen, parse_san, resolve_move};
@@ -111,9 +113,6 @@ let resolved = resolve_move(&pos, &mv).unwrap();
 assert_eq!(resolved.from.to_string(), "e2");
 assert_eq!(resolved.to.to_string(), "e4");
 ```
-
-It does not check king safety: a move that resolves here may still be
-illegal because it leaves the mover's own king in check.
 
 ## CLI usage
 
@@ -141,7 +140,8 @@ cargo test
 ## What's not here yet
 
 This is a syntax parser, not a chess engine. `resolve_move` finds which
-piece a SAN move refers to and validates disambiguation, but it doesn't
-check king safety - it won't reject a move that walks into check, leaves
-a pinned piece exposed, or "castles" through check. See the issues for
-what's planned.
+piece a SAN move refers to, validates disambiguation, and rejects moves
+that leave the mover's own king in check, but it has no notion of a full
+game: no move generation, no checkmate/stalemate detection beyond the `+`
+and `#` markers a SAN string already carries, and no draw rules. See the
+issues for what's planned.

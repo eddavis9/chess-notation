@@ -3,10 +3,10 @@
 //!
 //! This checks piece movement geometry, blocking pieces on sliding moves,
 //! whether a disambiguation narrows the candidates to exactly one piece,
-//! and whether a capture/non-capture move matches what's actually on the
-//! destination square. It does not check king safety - a move that
-//! resolves here may still be illegal because it leaves the mover's own
-//! king in check, or because it's a pin. That's the next piece to build.
+//! whether a capture/non-capture move matches what's actually on the
+//! destination square, and whether making the move would leave the mover's
+//! own king in check (including a king castling out of, through, or into
+//! check).
 
 use std::fmt;
 
@@ -110,10 +110,32 @@ fn resolve_castle(pos: &Position, kingside: bool) -> Result<ResolvedMove, Resolv
         }
     }
 
+    // A king can't castle out of, through, or into check - only the three
+    // squares it actually crosses matter, not the rook's side of the path.
+    let opponent = other_color(color);
+    let step: i8 = if kingside { 1 } else { -1 };
+    for step_count in 0..3 {
+        let file = 4 + step * step_count;
+        let sq = Square { file: file as u8, rank: home_rank };
+        if square_attacked_by(&pos.board, sq, opponent) {
+            return Err(err(format!(
+                "cannot castle through an attacked square ({})",
+                sq
+            )));
+        }
+    }
+
     Ok(ResolvedMove {
         from: king_from,
         to: king_to,
     })
+}
+
+fn other_color(color: Color) -> Color {
+    match color {
+        Color::White => Color::Black,
+        Color::Black => Color::White,
+    }
 }
 
 fn color_name(color: Color) -> &'static str {
@@ -137,7 +159,8 @@ fn resolve_piece_move(
     check_destination(pos, pos.side_to_move, capture, to)?;
 
     let color = pos.side_to_move;
-    let mut candidates = Vec::new();
+    let mut reachable = Vec::new();
+    let mut legal = Vec::new();
     for rank in 0..8u8 {
         for file in 0..8u8 {
             let from = Square { file, rank };
@@ -151,12 +174,15 @@ fn resolve_piece_move(
                 continue;
             }
             if reaches(pos, piece, from, to) {
-                candidates.push(from);
+                reachable.push(from);
+                if !leaves_king_in_check(pos, from, to, None) {
+                    legal.push(from);
+                }
             }
         }
     }
 
-    finish(candidates, piece, to)
+    finish(reachable, legal, piece, to)
 }
 
 fn check_destination(
@@ -240,7 +266,8 @@ fn resolve_pawn_move(
         Color::Black => 6,
     };
 
-    let mut candidates = Vec::new();
+    let mut reachable = Vec::new();
+    let mut legal = Vec::new();
 
     if capture {
         let is_en_passant = pos.en_passant == Some(to);
@@ -266,7 +293,18 @@ fn resolve_pawn_move(
             if pos.piece_at(from) == Some(Piece { kind: PieceKind::Pawn, color })
                 && matches_disambiguation(from, disambiguation)
             {
-                candidates.push(from);
+                reachable.push(from);
+                // An en passant capture removes a pawn that isn't sitting on
+                // the destination square, so the simulated board needs to
+                // know about it separately from the from/to move itself.
+                let en_passant_capture = if is_en_passant {
+                    Some(Square { file: to.file, rank: from.rank })
+                } else {
+                    None
+                };
+                if !leaves_king_in_check(pos, from, to, en_passant_capture) {
+                    legal.push(from);
+                }
             }
         }
     } else {
@@ -286,7 +324,10 @@ fn resolve_pawn_move(
             if pos.piece_at(from) == Some(Piece { kind: PieceKind::Pawn, color })
                 && matches_disambiguation(from, disambiguation)
             {
-                candidates.push(from);
+                reachable.push(from);
+                if !leaves_king_in_check(pos, from, to, None) {
+                    legal.push(from);
+                }
             }
         }
 
@@ -304,30 +345,174 @@ fn resolve_pawn_move(
                 && pos.piece_at(mid).is_none()
                 && matches_disambiguation(from, disambiguation)
             {
-                candidates.push(from);
+                reachable.push(from);
+                if !leaves_king_in_check(pos, from, to, None) {
+                    legal.push(from);
+                }
             }
         }
     }
 
-    finish(candidates, PieceKind::Pawn, to)
+    finish(reachable, legal, PieceKind::Pawn, to)
 }
 
-fn finish(candidates: Vec<Square>, piece: PieceKind, to: Square) -> Result<ResolvedMove, ResolveError> {
-    match candidates.len() {
-        0 => Err(err(format!("no {:?} can reach {}", piece, to))),
+// `reachable` is every piece of the right kind whose geometry and
+// disambiguation match; `legal` is the subset of those that don't leave the
+// mover's own king in check. Keeping both lets the error message tell a
+// pinned piece apart from a piece that simply can't make the move at all.
+fn finish(
+    reachable: Vec<Square>,
+    legal: Vec<Square>,
+    piece: PieceKind,
+    to: Square,
+) -> Result<ResolvedMove, ResolveError> {
+    match legal.len() {
+        0 if reachable.is_empty() => Err(err(format!("no {:?} can reach {}", piece, to))),
+        0 => Err(err(format!(
+            "moving {} to {} would leave the king in check",
+            reachable
+                .iter()
+                .map(|sq| sq.to_string())
+                .collect::<Vec<_>>()
+                .join(" or "),
+            to
+        ))),
         1 => Ok(ResolvedMove {
-            from: candidates[0],
+            from: legal[0],
             to,
         }),
         _ => Err(err(format!(
             "ambiguous move: {} pieces can reach {} ({})",
-            candidates.len(),
+            legal.len(),
             to,
-            candidates
+            legal
                 .iter()
                 .map(|sq| sq.to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         ))),
     }
+}
+
+// Applies a move to a scratch copy of the board and checks whether the
+// mover's own king ends up attacked. `en_passant_capture`, when set, is the
+// square of a pawn captured en passant - it isn't `to`, so it has to be
+// cleared separately from the from/to move.
+fn leaves_king_in_check(
+    pos: &Position,
+    from: Square,
+    to: Square,
+    en_passant_capture: Option<Square>,
+) -> bool {
+    let mover = pos.side_to_move;
+    let mut board = pos.board;
+    board[square_index(to)] = board[square_index(from)];
+    board[square_index(from)] = None;
+    if let Some(sq) = en_passant_capture {
+        board[square_index(sq)] = None;
+    }
+
+    match king_square(&board, mover) {
+        Some(king_sq) => square_attacked_by(&board, king_sq, other_color(mover)),
+        // A position with no king for the side to move can't happen from a
+        // legally parsed FEN, but treating it as "not in check" rather than
+        // panicking keeps this function total.
+        None => false,
+    }
+}
+
+fn square_index(sq: Square) -> usize {
+    sq.rank as usize * 8 + sq.file as usize
+}
+
+fn king_square(board: &[Option<Piece>; 64], color: Color) -> Option<Square> {
+    board
+        .iter()
+        .position(|p| *p == Some(Piece { kind: PieceKind::King, color }))
+        .map(|i| Square {
+            file: (i % 8) as u8,
+            rank: (i / 8) as u8,
+        })
+}
+
+/// Whether `sq` is attacked by any piece of `attacker`'s color on `board`.
+fn square_attacked_by(board: &[Option<Piece>; 64], sq: Square, attacker: Color) -> bool {
+    let piece_at = |s: Square| board[square_index(s)];
+
+    // Pawns attack diagonally toward the opponent, i.e. opposite the
+    // direction they push, so look one rank behind `sq` from `attacker`'s
+    // point of view.
+    let pawn_dir: i8 = match attacker {
+        Color::White => 1,
+        Color::Black => -1,
+    };
+    for df in [-1i8, 1i8] {
+        let file = sq.file as i8 + df;
+        let rank = sq.rank as i8 - pawn_dir;
+        if (0..8).contains(&file) && (0..8).contains(&rank) {
+            let from = Square { file: file as u8, rank: rank as u8 };
+            if piece_at(from) == Some(Piece { kind: PieceKind::Pawn, color: attacker }) {
+                return true;
+            }
+        }
+    }
+
+    const KNIGHT_STEPS: [(i8, i8); 8] = [
+        (1, 2), (2, 1), (-1, 2), (-2, 1), (1, -2), (2, -1), (-1, -2), (-2, -1),
+    ];
+    for (df, dr) in KNIGHT_STEPS {
+        let file = sq.file as i8 + df;
+        let rank = sq.rank as i8 + dr;
+        if (0..8).contains(&file) && (0..8).contains(&rank) {
+            let from = Square { file: file as u8, rank: rank as u8 };
+            if piece_at(from) == Some(Piece { kind: PieceKind::Knight, color: attacker }) {
+                return true;
+            }
+        }
+    }
+
+    for df in -1i8..=1 {
+        for dr in -1i8..=1 {
+            if df == 0 && dr == 0 {
+                continue;
+            }
+            let file = sq.file as i8 + df;
+            let rank = sq.rank as i8 + dr;
+            if (0..8).contains(&file) && (0..8).contains(&rank) {
+                let from = Square { file: file as u8, rank: rank as u8 };
+                if piece_at(from) == Some(Piece { kind: PieceKind::King, color: attacker }) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    const DIRECTIONS: [(i8, i8); 8] = [
+        (1, 1), (1, -1), (-1, 1), (-1, -1), (1, 0), (-1, 0), (0, 1), (0, -1),
+    ];
+    for (df, dr) in DIRECTIONS {
+        let diagonal = df != 0 && dr != 0;
+        let mut file = sq.file as i8 + df;
+        let mut rank = sq.rank as i8 + dr;
+        while (0..8).contains(&file) && (0..8).contains(&rank) {
+            let at = Square { file: file as u8, rank: rank as u8 };
+            if let Some(p) = piece_at(at) {
+                if p.color == attacker {
+                    let slides_this_way = if diagonal {
+                        p.kind == PieceKind::Bishop || p.kind == PieceKind::Queen
+                    } else {
+                        p.kind == PieceKind::Rook || p.kind == PieceKind::Queen
+                    };
+                    if slides_this_way {
+                        return true;
+                    }
+                }
+                break;
+            }
+            file += df;
+            rank += dr;
+        }
+    }
+
+    false
 }

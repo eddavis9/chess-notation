@@ -5,10 +5,9 @@
 //! (piece, disambiguation, capture, destination, promotion, check marker).
 //! It does not know about a board on its own. `parse_fen` parses a board
 //! position separately, and `resolve_move` ties the two together: given a
-//! parsed move and a position, it finds the piece the move refers to and
-//! checks that any disambiguation given was actually necessary. It does not
-//! check king safety, so a resolved move may still be illegal because it
-//! leaves the mover in check - that's the next piece to build.
+//! parsed move and a position, it finds the piece the move refers to,
+//! checks that any disambiguation given was actually necessary, and
+//! rejects the move if it leaves the mover's own king in check.
 
 use std::fmt;
 
