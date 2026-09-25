@@ -137,6 +137,13 @@ cargo build
 cargo test
 ```
 
+`tests/fuzz_san.rs` throws random and adversarial strings at `parse_san` -
+some drawn from the SAN alphabet, some arbitrary bytes reinterpreted as
+UTF-8 - and checks that it only ever returns `Ok` or `Err`, never panics,
+and that anything it accepts round-trips through `Display` back to an
+equal `Move`. It uses a small seeded xorshift generator instead of a
+dependency, so a failure is always reproducible by rerunning `cargo test`.
+
 ## What's not here yet
 
 This is a syntax parser, not a chess engine. `resolve_move` finds which
